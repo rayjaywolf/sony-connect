@@ -26,7 +26,14 @@ struct Panel: View {
         }
         .padding(12)
         .frame(width: 666)
-        .background(Theme.background)
+        .background(
+            LinearGradient(
+                colors: [headphones.mode.tint.opacity(isConnected ? 0.16 : 0), .clear],
+                startPoint: .top,
+                endPoint: .center
+            )
+            .animation(.smooth(duration: 0.5), value: headphones.mode)
+        )
         .background(TopAnchor())
         .animation(.smooth(duration: 0.3), value: isConnected)
         .onAppear { headphones.startSoundLevel() }
@@ -51,13 +58,13 @@ struct Panel: View {
     }
 
     private var noiseCard: some View {
-        Card {
+        Card(tint: headphones.mode.tint) {
             SectionLabel("Noise control")
             TilePicker(
                 options: [
-                    TileOption(value: NoiseMode.noiseCancelling, title: "NC", symbol: "waveform.badge.minus"),
-                    TileOption(value: NoiseMode.ambient, title: "Ambient", symbol: "ear"),
-                    TileOption(value: NoiseMode.off, title: "Off", symbol: "circle.slash"),
+                    TileOption(value: NoiseMode.noiseCancelling, title: "NC", symbol: "waveform.badge.minus", tint: NoiseMode.noiseCancelling.tint),
+                    TileOption(value: NoiseMode.ambient, title: "Ambient", symbol: "ear", tint: NoiseMode.ambient.tint),
+                    TileOption(value: NoiseMode.off, title: "Off", symbol: "circle.slash", tint: NoiseMode.off.tint),
                 ],
                 selection: headphones.mode,
                 select: headphones.setMode
@@ -86,13 +93,13 @@ struct Panel: View {
     }
 
     private var listeningCard: some View {
-        Card {
+        Card(tint: headphones.listeningMode.tint) {
             SectionLabel("Listening mode")
             TilePicker(
                 options: [
-                    TileOption(value: ListeningMode.standard, title: "Standard", symbol: "music.note"),
-                    TileOption(value: ListeningMode.backgroundMusic, title: "Background", symbol: "music.note.house"),
-                    TileOption(value: ListeningMode.cinema, title: "Cinema", symbol: "film"),
+                    TileOption(value: ListeningMode.standard, title: "Standard", symbol: "music.note", tint: ListeningMode.standard.tint),
+                    TileOption(value: ListeningMode.backgroundMusic, title: "Background", symbol: "music.note.house", tint: ListeningMode.backgroundMusic.tint),
+                    TileOption(value: ListeningMode.cinema, title: "Cinema", symbol: "film", tint: ListeningMode.cinema.tint),
                 ],
                 selection: headphones.listeningMode,
                 select: headphones.setListeningMode
@@ -119,7 +126,7 @@ struct Panel: View {
     }
 
     private var soundCard: some View {
-        Card {
+        Card(tint: .cyan) {
             ValueSlider(
                 title: "Volume",
                 value: $headphones.volume,
@@ -128,13 +135,13 @@ struct Panel: View {
                 high: "speaker.wave.3.fill",
                 commit: headphones.commitVolume
             )
-            RowSeparator()
+            Divider().opacity(0.6)
             SoundMeter(level: headphones.soundLevel, note: headphones.soundLevelNote)
         }
     }
 
     private var featuresCard: some View {
-        Card {
+        Card(tint: .yellow) {
             ToggleRow(
                 title: "DSEE Extreme",
                 detail: "Restores detail in compressed music",
@@ -142,7 +149,7 @@ struct Panel: View {
                 artwork: Artwork.dsee,
                 isOn: Binding(get: { headphones.dsee }, set: headphones.setDSEE)
             )
-            RowSeparator()
+            Divider().opacity(0.6)
             ToggleRow(
                 title: "Speak-to-chat",
                 detail: "Pauses music and lets sound in when you talk",
@@ -156,11 +163,20 @@ struct Panel: View {
         ExpandableCard(
             title: "Equalizer",
             symbol: "slider.vertical.3",
+            tint: .purple,
             summary: headphones.currentEqPreset?.name,
             isOpen: $state.equalizerOpen
         ) {
             VStack(alignment: .leading, spacing: 12) {
-                PresetMenu(headphones: headphones)
+                Picker("Preset", selection: Binding(
+                    get: { headphones.currentEqPreset },
+                    set: { if let preset = $0 { headphones.selectEqPreset(preset) } }
+                )) {
+                    ForEach(headphones.eqPresets) { preset in
+                        Text(preset.name).tag(Optional(preset))
+                    }
+                }
+                .labelsHidden()
 
                 if headphones.eqPresetID != 0x00, !headphones.eqBands.isEmpty {
                     EqualizerBands(headphones: headphones)
@@ -175,6 +191,7 @@ struct Panel: View {
         ExpandableCard(
             title: "Devices",
             symbol: "laptopcomputer.and.iphone",
+            tint: .green,
             summary: headphones.devices.first(where: \.playing)?.name,
             summarySymbol: headphones.playbackFixed ? "lock.fill" : nil,
             isOpen: $state.devicesOpen
@@ -183,8 +200,8 @@ struct Panel: View {
                 let connected = headphones.devices.filter(\.connected).sorted { $0.playing && !$1.playing }
                 if connected.isEmpty {
                     Text("Reading connected devices…")
-                        .font(Theme.font(12))
-                        .foregroundStyle(Theme.muted)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
                 }
                 ForEach(connected) { device in
                     DeviceRow(device: device, playbackFixed: headphones.playbackFixed) {
@@ -195,13 +212,13 @@ struct Panel: View {
                 }
                 if let failure = headphones.switchFailure {
                     Label(failure, systemImage: "exclamationmark.triangle.fill")
-                        .font(Theme.font(11, .medium))
-                        .foregroundStyle(Theme.danger)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
                         .transition(.opacity)
                 }
                 if let playing = headphones.devices.first(where: \.playing) {
-                    RowSeparator()
+                    Divider().opacity(0.6)
                     ToggleRow(
                         title: "Keep playback here",
                         detail: "Stays on \(playing.name)",
@@ -232,11 +249,10 @@ struct Header: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(headphones.name)
-                    .font(Theme.font(14, .semibold))
-                    .foregroundStyle(Theme.foreground)
+                    .font(.system(size: 13, weight: .semibold))
                 Text(subtitle)
-                    .font(Theme.font(11))
-                    .foregroundStyle(Theme.muted)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
                     .contentTransition(.opacity)
             }
 
@@ -248,6 +264,7 @@ struct Header: View {
             }
         }
         .animation(.smooth(duration: 0.3), value: subtitle)
+        .animation(.smooth(duration: 0.4), value: headphones.mode)
     }
 
     private var subtitle: String {
@@ -273,11 +290,11 @@ struct DisconnectedCard: View {
             VStack(spacing: 12) {
                 Image(systemName: headphones.status == .connecting ? "headphones" : "headphones.circle")
                     .font(.system(size: 30, weight: .light))
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(.secondary)
                     .symbolEffect(.pulse, isActive: headphones.status == .connecting)
                 Text(message)
-                    .font(Theme.font(12))
-                    .foregroundStyle(Theme.muted)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                 if headphones.status != .connecting, headphones.status != .notPaired {
@@ -285,8 +302,10 @@ struct DisconnectedCard: View {
                         Task { await headphones.connect(userInitiated: true) }
                     } label: {
                         Label("Connect to headphones", systemImage: "link")
+                            .padding(.horizontal, 4)
                     }
-                    .buttonStyle(PrimaryButtonStyle())
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -312,12 +331,10 @@ struct Footer: View {
         HStack(spacing: 14) {
             Toggle(isOn: Binding(get: { loginItem.isEnabled }, set: loginItem.set)) {
                 Text("Open at login")
-                    .font(Theme.font(12, .medium))
-                    .foregroundStyle(Theme.muted)
+                    .font(.system(size: 12))
             }
             .toggleStyle(.checkbox)
             .controlSize(.small)
-            .tint(Theme.accent)
 
             Spacer()
 
@@ -344,27 +361,28 @@ struct DeviceRow: View {
             IconBadge(symbol: symbol, active: device.playing)
             VStack(alignment: .leading, spacing: 1) {
                 Text(device.name)
-                    .font(Theme.font(13, .medium))
-                    .foregroundStyle(Theme.foreground)
+                    .font(.system(size: 13))
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Text(statusText)
-                    .font(Theme.font(11))
-                    .foregroundStyle(Theme.muted)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
             if device.playing {
                 Image(systemName: playbackFixed ? "lock.fill" : "speaker.wave.2.fill")
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Color.green)
                     .symbolEffect(.variableColor.iterative, options: .repeating, isActive: !playbackFixed)
                     .help(playbackFixed ? "Playback is kept on this device" : "Playing on this device")
                     .transition(.scale.combined(with: .opacity))
             } else {
                 Button(action: play) {
                     Label("Play here", systemImage: "play.fill")
+                        .font(.system(size: 11, weight: .medium))
                 }
-                .buttonStyle(SecondaryButtonStyle())
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .transition(.opacity)
             }
         }
@@ -405,10 +423,10 @@ struct EqualizerBands: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .bottom, spacing: 0) {
                 if headphones.hasClearBass {
-                    band(label: "Bass", value: $headphones.clearBass)
+                    band(label: "Bass", color: Color(hue: 0.72, saturation: 0.7, brightness: 0.95), value: $headphones.clearBass)
                 }
                 ForEach(headphones.eqBands.indices, id: \.self) { index in
-                    band(label: label(for: index), value: Binding(
+                    band(label: label(for: index), color: color(for: index), value: Binding(
                         get: { headphones.eqBands.indices.contains(index) ? headphones.eqBands[index] : 0 },
                         set: { if headphones.eqBands.indices.contains(index) { headphones.eqBands[index] = $0 } }
                     ))
@@ -416,13 +434,13 @@ struct EqualizerBands: View {
             }
             .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-                    .fill(Theme.surfaceSecondary)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color.purple.opacity(0.06))
             )
             if headphones.currentEqPreset?.isCustomizable != true {
                 Label("Moving a slider switches to Custom", systemImage: "info.circle")
-                    .font(Theme.font(11))
-                    .foregroundStyle(Theme.muted)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -432,53 +450,47 @@ struct EqualizerBands: View {
         return labels.indices.contains(index) ? labels[index] : "\(index + 1)"
     }
 
-    private func band(label: String, value: Binding<Double>) -> some View {
+    private func color(for index: Int) -> Color {
+        let count = max(headphones.eqBands.count - 1, 1)
+        let hue = 0.74 + 0.2 * Double(index) / Double(count)
+        return Color(hue: hue, saturation: 0.65, brightness: 0.95)
+    }
+
+    private func band(label: String, color: Color, value: Binding<Double>) -> some View {
         VStack(spacing: 5) {
             Text(value.wrappedValue > 0 ? "+\(Int(value.wrappedValue))" : "\(Int(value.wrappedValue))")
-                .font(Theme.font(10, .medium))
+                .font(.system(size: 10, weight: .medium, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(value.wrappedValue == 0 ? Theme.muted : Theme.foreground)
+                .foregroundStyle(value.wrappedValue == 0 ? .secondary : .primary)
                 .contentTransition(.numericText(value: value.wrappedValue))
-            VerticalSlider(value: value, range: headphones.eqBandRange) {
+            VerticalSlider(value: value, range: headphones.eqBandRange, color: color) {
                 headphones.commitEqBands()
             }
             .frame(width: 22, height: 104)
             Text(label)
-                .font(Theme.font(9, .medium))
-                .foregroundStyle(Theme.muted)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
     }
 }
 
-struct PresetMenu: View {
-    @ObservedObject var headphones: Headphones
-
-    var body: some View {
-        Menu {
-            ForEach(headphones.eqPresets) { preset in
-                Button(preset.name) { headphones.selectEqPreset(preset) }
-            }
-        } label: {
-            HStack {
-                Text(headphones.currentEqPreset?.name ?? "Choose a preset")
-                    .font(Theme.font(13, .medium))
-                    .foregroundStyle(Theme.foreground)
-                Spacer()
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Theme.muted)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.fieldRadius, style: .continuous)
-                    .fill(Theme.surfaceSecondary)
-            )
-            .contentShape(Rectangle())
+extension NoiseMode {
+    var tint: Color {
+        switch self {
+        case .noiseCancelling: .indigo
+        case .ambient: .orange
+        case .off: .gray
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
+    }
+}
+
+extension ListeningMode {
+    var tint: Color {
+        switch self {
+        case .standard: .blue
+        case .backgroundMusic: .teal
+        case .cinema: .pink
+        }
     }
 }
