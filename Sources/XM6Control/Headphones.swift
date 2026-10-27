@@ -62,7 +62,7 @@ final class Headphones: NSObject, ObservableObject {
     @Published private(set) var hasClearBass = false
     @Published private(set) var soundLevel: Int?
     @Published private(set) var soundLevelNote: String?
-    @Published var ambientLevel: Double = 10
+    @Published var ambientLevel: Double = 20
     @Published var volume: Double = 15
 
     private static let serviceUUIDs: [[UInt8]] = [
@@ -317,6 +317,9 @@ final class Headphones: NSObject, ObservableObject {
     }
 
     func setMode(_ newMode: NoiseMode) {
+        if newMode == .ambient && mode != .ambient {
+            ambientLevel = 20
+        }
         mode = newMode
         sendNoiseSettings()
     }
