@@ -156,7 +156,7 @@ struct Panel: View {
                 Text("Reading paired devices…")
                     .foregroundStyle(.secondary)
             }
-            ForEach(headphones.devices) { device in
+            ForEach(headphones.devices.filter(\.connected)) { device in
                 DeviceRow(device: device, playbackFixed: headphones.playbackFixed) {
                     headphones.playOn(device)
                 } connect: {
