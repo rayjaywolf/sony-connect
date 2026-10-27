@@ -37,9 +37,12 @@ final class TopAnchorView: NSView {
 
     private func pin() {
         guard !pinning, let window, let top = menuBarBottom(for: window) else { return }
-        guard abs(window.frame.maxY - top) > 0.5 else { return }
+        let height = (bounds.height * 2).rounded() / 2
+        guard height > 1 else { return }
+        let target = NSRect(x: window.frame.minX, y: top - height, width: window.frame.width, height: height)
+        guard abs(window.frame.maxY - top) > 0.5 || abs(window.frame.height - height) > 0.5 else { return }
         pinning = true
-        window.setFrameTopLeftPoint(NSPoint(x: window.frame.minX, y: top))
+        window.setFrame(target, display: true, animate: false)
         pinning = false
     }
 

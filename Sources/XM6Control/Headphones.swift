@@ -79,6 +79,10 @@ final class Headphones: NSObject, ObservableObject {
     private var reader = FrameReader()
     private var seq: UInt8 = 0
     private var pending: (id: UUID, dataType: UInt8, expects: Set<UInt8>, type: UInt8?, done: CheckedContinuation<[UInt8]?, Never>)?
+    private var acked = false
+    private var unackedStreak = 0
+    private var lastReceived: (type: UInt8, seq: UInt8, payload: [UInt8])?
+    private var restarting = false
     private var openWaiter: CheckedContinuation<Bool, Never>?
     private var sdpWaiter: CheckedContinuation<Void, Never>?
     private var queueTail: Task<Void, Never>?
@@ -379,7 +383,8 @@ final class Headphones: NSObject, ObservableObject {
     private func transmit(_ payload: [UInt8], on dataType: UInt8, matchType: Bool, timeout: Double) async -> [UInt8]? {
         guard let channel, channel.isOpen(), let command = payload.first else { return nil }
         let id = UUID()
-        return await withCheckedContinuation { continuation in
+        acked = false
+        let reply = await withCheckedContinuation { continuation in
             pending = (id, dataType, [command, command &+ 1], matchType && payload.count > 1 ? payload[1] : nil, continuation)
             let packet = Frame.pack(type: dataType, seq: seq, payload: payload)
             log.info("TX seq=\(self.seq, privacy: .public) \(Self.hex(payload), privacy: .public)")
@@ -388,12 +393,44 @@ final class Headphones: NSObject, ObservableObject {
                 return
             }
             Task {
+                try? await Task.sleep(for: .seconds(min(1, timeout)))
+                guard self.pending?.id == id, !self.acked, let open = self.channel, open.isOpen() else { return }
+                self.log.info("No ACK for \(Self.hex(payload), privacy: .public), resending")
+                self.write(packet, to: open)
+            }
+            Task {
                 try? await Task.sleep(for: .seconds(timeout))
                 if self.pending?.id == id {
-                    self.log.info("No reply to \(Self.hex(payload), privacy: .public)")
+                    self.log.info("No reply to \(Self.hex(payload), privacy: .public) acked=\(self.acked, privacy: .public)")
                 }
                 self.finish(id, with: nil)
             }
+        }
+        if reply != nil || acked {
+            unackedStreak = 0
+        } else {
+            unackedStreak += 1
+            if unackedStreak >= 3 {
+                restartLink()
+            }
+        }
+        return reply
+    }
+
+    private func restartLink() {
+        guard !restarting, status == .connected else { return }
+        restarting = true
+        unackedStreak = 0
+        log.info("Headphones stopped acknowledging commands, reopening the channel")
+        let closing = channel
+        status = .connecting
+        tearDown()
+        closing?.close()
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            status = .disconnected
+            await connect(userInitiated: false)
+            restarting = false
         }
     }
 
@@ -418,18 +455,23 @@ final class Headphones: NSObject, ObservableObject {
     private func received(_ bytes: [UInt8]) {
         guard let channel else { return }
         for message in reader.feed(bytes) {
-            let replySeq: UInt8 = message.seq <= 1 ? 1 - message.seq : 0
-            write(Frame.pack(type: Frame.ack, seq: replySeq, payload: []), to: channel)
             if message.type == Frame.ack {
                 seq = message.seq
+                acked = true
                 continue
             }
+            let replySeq: UInt8 = message.seq <= 1 ? 1 - message.seq : 0
+            write(Frame.pack(type: Frame.ack, seq: replySeq, payload: []), to: channel)
+            let repeated = lastReceived.map { $0.type == message.type && $0.seq == message.seq && $0.payload == message.payload } ?? false
+            lastReceived = (message.type, message.seq, message.payload)
             guard let command = message.payload.first else { continue }
-            log.info("RX \(message.type == Frame.dataMdr2 ? "T2 " : "", privacy: .public)\(Self.hex(message.payload), privacy: .public)")
-            if message.type == Frame.dataMdr2 {
-                applyPeripheral(message.payload)
-            } else {
-                apply(message.payload)
+            if !repeated {
+                log.info("RX \(message.type == Frame.dataMdr2 ? "T2 " : "", privacy: .public)\(Self.hex(message.payload), privacy: .public)")
+                if message.type == Frame.dataMdr2 {
+                    applyPeripheral(message.payload)
+                } else {
+                    apply(message.payload)
+                }
             }
             if let current = pending, current.dataType == message.type, current.expects.contains(command),
                current.type == nil || (message.payload.count > 1 && message.payload[1] == current.type) {
@@ -632,6 +674,8 @@ final class Headphones: NSObject, ObservableObject {
     private func tearDown() {
         channel = nil
         reader.reset()
+        lastReceived = nil
+        acked = false
         if let current = pending {
             pending = nil
             current.done.resume(returning: nil)
