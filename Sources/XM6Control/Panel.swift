@@ -26,6 +26,14 @@ struct Panel: View {
         }
         .padding(12)
         .frame(width: 666)
+        .background(
+            LinearGradient(
+                colors: [headphones.mode.tint.opacity(isConnected ? 0.16 : 0), .clear],
+                startPoint: .top,
+                endPoint: .center
+            )
+            .animation(.smooth(duration: 0.5), value: headphones.mode)
+        )
         .background(TopAnchor())
         .animation(.smooth(duration: 0.3), value: isConnected)
         .onAppear { headphones.startSoundLevel() }
@@ -50,13 +58,13 @@ struct Panel: View {
     }
 
     private var noiseCard: some View {
-        Card {
+        Card(tint: headphones.mode.tint) {
             SectionLabel("Noise control")
             TilePicker(
                 options: [
-                    TileOption(value: NoiseMode.noiseCancelling, title: "NC", symbol: "waveform.badge.minus"),
-                    TileOption(value: NoiseMode.ambient, title: "Ambient", symbol: "ear"),
-                    TileOption(value: NoiseMode.off, title: "Off", symbol: "circle.slash"),
+                    TileOption(value: NoiseMode.noiseCancelling, title: "NC", symbol: "waveform.badge.minus", tint: NoiseMode.noiseCancelling.tint),
+                    TileOption(value: NoiseMode.ambient, title: "Ambient", symbol: "ear", tint: NoiseMode.ambient.tint),
+                    TileOption(value: NoiseMode.off, title: "Off", symbol: "circle.slash", tint: NoiseMode.off.tint),
                 ],
                 selection: headphones.mode,
                 select: headphones.setMode
@@ -85,13 +93,13 @@ struct Panel: View {
     }
 
     private var listeningCard: some View {
-        Card {
+        Card(tint: headphones.listeningMode.tint) {
             SectionLabel("Listening mode")
             TilePicker(
                 options: [
-                    TileOption(value: ListeningMode.standard, title: "Standard", symbol: "music.note"),
-                    TileOption(value: ListeningMode.backgroundMusic, title: "Background", symbol: "music.note.house"),
-                    TileOption(value: ListeningMode.cinema, title: "Cinema", symbol: "film"),
+                    TileOption(value: ListeningMode.standard, title: "Standard", symbol: "music.note", tint: ListeningMode.standard.tint),
+                    TileOption(value: ListeningMode.backgroundMusic, title: "Background", symbol: "music.note.house", tint: ListeningMode.backgroundMusic.tint),
+                    TileOption(value: ListeningMode.cinema, title: "Cinema", symbol: "film", tint: ListeningMode.cinema.tint),
                 ],
                 selection: headphones.listeningMode,
                 select: headphones.setListeningMode
@@ -118,7 +126,7 @@ struct Panel: View {
     }
 
     private var soundCard: some View {
-        Card {
+        Card(tint: .cyan) {
             ValueSlider(
                 title: "Volume",
                 value: $headphones.volume,
@@ -133,7 +141,7 @@ struct Panel: View {
     }
 
     private var featuresCard: some View {
-        Card {
+        Card(tint: .yellow) {
             ToggleRow(
                 title: "DSEE Extreme",
                 detail: "Restores detail in compressed music",
@@ -147,6 +155,7 @@ struct Panel: View {
         ExpandableCard(
             title: "Equalizer",
             symbol: "slider.vertical.3",
+            tint: .purple,
             summary: headphones.currentEqPreset?.name,
             isOpen: $state.equalizerOpen
         ) {
@@ -174,6 +183,7 @@ struct Panel: View {
         ExpandableCard(
             title: "Devices",
             symbol: "laptopcomputer.and.iphone",
+            tint: .green,
             summary: headphones.devices.first(where: \.playing)?.name,
             summarySymbol: headphones.playbackFixed ? "lock.fill" : nil,
             isOpen: $state.devicesOpen
@@ -223,10 +233,10 @@ struct Header: View {
         HStack(spacing: 10) {
             ZStack {
                 Circle()
-                    .fill(isConnected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.07))
+                    .fill(isConnected ? AnyShapeStyle(headphones.mode.tint.gradient) : AnyShapeStyle(Color.primary.opacity(0.07)))
                 Image(systemName: "headphones")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(isConnected ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(isConnected ? Color.white : Color.secondary)
             }
             .frame(width: 34, height: 34)
 
@@ -247,6 +257,7 @@ struct Header: View {
             }
         }
         .animation(.smooth(duration: 0.3), value: subtitle)
+        .animation(.smooth(duration: 0.4), value: headphones.mode)
     }
 
     private var subtitle: String {
@@ -354,7 +365,7 @@ struct DeviceRow: View {
             if device.playing {
                 Image(systemName: playbackFixed ? "lock.fill" : "speaker.wave.2.fill")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.green)
                     .symbolEffect(.variableColor.iterative, options: .repeating, isActive: !playbackFixed)
                     .help(playbackFixed ? "Playback is kept on this device" : "Playing on this device")
                     .transition(.scale.combined(with: .opacity))
@@ -405,10 +416,10 @@ struct EqualizerBands: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .bottom, spacing: 0) {
                 if headphones.hasClearBass {
-                    band(label: "Bass", value: $headphones.clearBass)
+                    band(label: "Bass", color: Color(hue: 0.72, saturation: 0.7, brightness: 0.95), value: $headphones.clearBass)
                 }
                 ForEach(headphones.eqBands.indices, id: \.self) { index in
-                    band(label: label(for: index), value: Binding(
+                    band(label: label(for: index), color: color(for: index), value: Binding(
                         get: { headphones.eqBands.indices.contains(index) ? headphones.eqBands[index] : 0 },
                         set: { if headphones.eqBands.indices.contains(index) { headphones.eqBands[index] = $0 } }
                     ))
@@ -417,7 +428,7 @@ struct EqualizerBands: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Color.primary.opacity(0.035))
+                    .fill(Color.purple.opacity(0.06))
             )
             if headphones.currentEqPreset?.isCustomizable != true {
                 Label("Moving a slider switches to Custom", systemImage: "info.circle")
@@ -432,14 +443,20 @@ struct EqualizerBands: View {
         return labels.indices.contains(index) ? labels[index] : "\(index + 1)"
     }
 
-    private func band(label: String, value: Binding<Double>) -> some View {
+    private func color(for index: Int) -> Color {
+        let count = max(headphones.eqBands.count - 1, 1)
+        let hue = 0.74 + 0.2 * Double(index) / Double(count)
+        return Color(hue: hue, saturation: 0.65, brightness: 0.95)
+    }
+
+    private func band(label: String, color: Color, value: Binding<Double>) -> some View {
         VStack(spacing: 5) {
             Text(value.wrappedValue > 0 ? "+\(Int(value.wrappedValue))" : "\(Int(value.wrappedValue))")
                 .font(.system(size: 10, weight: .medium, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(value.wrappedValue == 0 ? .secondary : .primary)
                 .contentTransition(.numericText(value: value.wrappedValue))
-            VerticalSlider(value: value, range: headphones.eqBandRange) {
+            VerticalSlider(value: value, range: headphones.eqBandRange, color: color) {
                 headphones.commitEqBands()
             }
             .frame(width: 22, height: 104)
@@ -448,5 +465,25 @@ struct EqualizerBands: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+extension NoiseMode {
+    var tint: Color {
+        switch self {
+        case .noiseCancelling: .indigo
+        case .ambient: .orange
+        case .off: .gray
+        }
+    }
+}
+
+extension ListeningMode {
+    var tint: Color {
+        switch self {
+        case .standard: .blue
+        case .backgroundMusic: .teal
+        case .cinema: .pink
+        }
     }
 }

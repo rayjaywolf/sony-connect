@@ -1,9 +1,22 @@
 import SwiftUI
 
+private struct CardTintKey: EnvironmentKey {
+    static let defaultValue = Color.accentColor
+}
+
+extension EnvironmentValues {
+    var cardTint: Color {
+        get { self[CardTintKey.self] }
+        set { self[CardTintKey.self] = newValue }
+    }
+}
+
 struct Card<Content: View>: View {
+    let tint: Color
     let content: Content
 
-    init(@ViewBuilder content: () -> Content) {
+    init(tint: Color = .accentColor, @ViewBuilder content: () -> Content) {
+        self.tint = tint
         self.content = content()
     }
 
@@ -15,12 +28,21 @@ struct Card<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.primary.opacity(0.045))
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.13), tint.opacity(0.04)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.06))
+                .strokeBorder(tint.opacity(0.2))
         )
+        .environment(\.cardTint, tint)
+        .tint(tint)
+        .animation(.smooth(duration: 0.35), value: tint)
     }
 }
 
@@ -41,14 +63,15 @@ struct SectionLabel: View {
 struct IconBadge: View {
     let symbol: String
     var active = false
+    @Environment(\.cardTint) private var tint
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(active ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.07))
+                .fill(active ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(tint.opacity(0.15)))
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(active ? Color.accentColor : Color.secondary)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(active ? Color.white : tint)
         }
         .frame(width: 26, height: 26)
         .animation(.smooth(duration: 0.25), value: active)
@@ -59,6 +82,7 @@ struct TileOption<Value: Hashable>: Identifiable {
     let value: Value
     let title: String
     let symbol: String
+    var tint: Color?
 
     var id: Value { value }
 }
@@ -68,6 +92,11 @@ struct TilePicker<Value: Hashable>: View {
     let selection: Value
     var compact = false
     let select: (Value) -> Void
+    @Environment(\.cardTint) private var cardTint
+
+    private var selectedTint: Color {
+        options.first { $0.value == selection }?.tint ?? cardTint
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -75,10 +104,10 @@ struct TilePicker<Value: Hashable>: View {
             let index = CGFloat(options.firstIndex { $0.value == selection } ?? 0)
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: compact ? 7 : 9, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.16))
+                    .fill(selectedTint.gradient.opacity(0.9))
                     .overlay(
                         RoundedRectangle(cornerRadius: compact ? 7 : 9, style: .continuous)
-                            .strokeBorder(Color.accentColor.opacity(0.35))
+                            .strokeBorder(Color.white.opacity(0.18))
                     )
                     .frame(width: width)
                     .offset(x: index * width)
@@ -127,7 +156,7 @@ struct TilePicker<Value: Hashable>: View {
                     }
                 }
             }
-            .foregroundStyle(selected ? Color.accentColor : Color.primary.opacity(0.75))
+            .foregroundStyle(selected ? Color.white : Color.primary.opacity(0.75))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
         }
@@ -206,6 +235,7 @@ struct ValueSlider: View {
 struct ExpandableCard<Content: View>: View {
     let title: String
     let symbol: String
+    let tint: Color
     let summary: String?
     var summarySymbol: String?
     @Binding var isOpen: Bool
@@ -214,6 +244,7 @@ struct ExpandableCard<Content: View>: View {
     init(
         title: String,
         symbol: String,
+        tint: Color = .accentColor,
         summary: String?,
         summarySymbol: String? = nil,
         isOpen: Binding<Bool>,
@@ -221,6 +252,7 @@ struct ExpandableCard<Content: View>: View {
     ) {
         self.title = title
         self.symbol = symbol
+        self.tint = tint
         self.summary = summary
         self.summarySymbol = summarySymbol
         self._isOpen = isOpen
@@ -228,7 +260,7 @@ struct ExpandableCard<Content: View>: View {
     }
 
     var body: some View {
-        Card {
+        Card(tint: tint) {
             Button {
                 withAnimation(.smooth(duration: 0.3)) { isOpen.toggle() }
             } label: {
@@ -292,7 +324,8 @@ struct BatteryBadge: View {
     private var fill: Color {
         if charging { return .green }
         if level <= 15 { return .red }
-        return Color.primary.opacity(0.75)
+        if level <= 30 { return .orange }
+        return .green
     }
 
     var body: some View {
@@ -357,7 +390,7 @@ struct SoundMeter: View {
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
-                    .foregroundStyle(isLoud ? Color.red : Color.primary)
+                    .foregroundStyle(segmentColor(Double(level)))
                     .transition(.opacity)
                 } else {
                     Text(note ?? "Measuring…")
@@ -390,18 +423,24 @@ struct SoundMeter: View {
         floor + (ceiling - floor) * Double(index) / Double(segments)
     }
 
+    private func segmentColor(_ db: Double) -> Color {
+        let fraction = min(max((db - 55) / (Double(limit) - 55), 0), 1)
+        return Color(hue: 0.36 * (1 - fraction), saturation: 0.8, brightness: 0.92)
+    }
+
     private func color(for index: Int) -> Color {
-        let loudSegment = decibels(at: index) >= Double(limit)
-        guard let level, decibels(at: index) < Double(level) else {
-            return loudSegment ? Color.red.opacity(0.14) : Color.primary.opacity(0.09)
+        let db = decibels(at: index)
+        guard let level, db < Double(level) else {
+            return segmentColor(db).opacity(0.16)
         }
-        return loudSegment ? .red : .accentColor
+        return segmentColor(db)
     }
 }
 
 struct VerticalSlider: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
+    var color: Color = .accentColor
     let onCommit: () -> Void
 
     private let knob: CGFloat = 12
@@ -421,7 +460,7 @@ struct VerticalSlider: View {
                     .frame(width: 10, height: 1)
                     .offset(y: zeroY + knob / 2)
                 Capsule()
-                    .fill(Color.accentColor)
+                    .fill(color.gradient)
                     .frame(width: 4, height: abs(zeroY - valueY))
                     .offset(y: min(zeroY, valueY) + knob / 2)
                 Circle()
