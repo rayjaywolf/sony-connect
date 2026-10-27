@@ -60,6 +60,8 @@ final class Headphones: NSObject, ObservableObject {
     @Published var eqBands: [Double] = []
     @Published var clearBass: Double = 0
     @Published private(set) var hasClearBass = false
+    @Published private(set) var soundLevel: Int?
+    @Published private(set) var soundLevelNote: String?
     @Published var ambientLevel: Double = 10
     @Published var volume: Double = 15
 
@@ -86,6 +88,8 @@ final class Headphones: NSObject, ObservableObject {
     private var speakToChatTimeout: UInt8 = 0x01
     private var recentReconnects: [Date] = []
     private var deviceListType: UInt8 = 0x02
+    private var soundLevelType: UInt8?
+    private var soundLevelTimer: Timer?
 
     func start() {
         connectNotification = IOBluetoothDevice.register(
@@ -99,11 +103,6 @@ final class Headphones: NSObject, ObservableObject {
             }
         }
         Task { await connect(userInitiated: false) }
-    }
-
-    func stop() {
-        channel?.close()
-        channel = nil
     }
 
     @objc private func deviceConnected(_ note: IOBluetoothUserNotification, fromDevice device: IOBluetoothDevice) {
@@ -181,6 +180,52 @@ final class Headphones: NSObject, ObservableObject {
         await request([0x36, 0x01], on: Frame.dataMdr2)
         await request([0x50, 0x00, 0x01], matchType: false)
         await request([0x56, 0x00])
+        if soundLevelTimer != nil { await setLiveMeasurement(true) }
+    }
+
+    func startSoundLevel() {
+        soundLevelTimer?.invalidate()
+        soundLevelTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.pollSoundLevel() }
+        }
+        Task {
+            await setLiveMeasurement(true)
+            await pollSoundLevel()
+        }
+    }
+
+    func stopSoundLevel() {
+        soundLevelTimer?.invalidate()
+        soundLevelTimer = nil
+        Task { await setLiveMeasurement(false) }
+    }
+
+    func stop() {
+        soundLevelTimer?.invalidate()
+        if let channel, channel.isOpen() {
+            write(Frame.pack(type: Frame.dataMdr2, seq: seq, payload: [0x58, 0x02, Self.off, Self.off]), to: channel)
+        }
+        channel?.close()
+        channel = nil
+    }
+
+    private func setLiveMeasurement(_ on: Bool) async {
+        guard status == .connected else { return }
+        await request([0x58, 0x02, on ? Self.on : Self.off, Self.off], on: Frame.dataMdr2, timeout: 1.5)
+    }
+
+    private func pollSoundLevel() async {
+        guard status == .connected else { return }
+        if let type = soundLevelType {
+            await request([0x5A, type], on: Frame.dataMdr2, timeout: 1.5)
+            return
+        }
+        for type: UInt8 in [0x02, 0x00] {
+            if await request([0x5A, type], on: Frame.dataMdr2, timeout: 1.5) != nil {
+                soundLevelType = type
+                return
+            }
+        }
     }
 
     var currentEqPreset: EqPreset? {
@@ -479,6 +524,20 @@ final class Headphones: NSObject, ObservableObject {
         case (0x37, 0x00), (0x39, 0x00), (0x37, 0x02), (0x39, 0x02):
             if let parsed = Self.parseDevices(p, withClassOfDevice: p[1] == 0x02) {
                 devices = parsed.sorted { ($0.connected ? 0 : 1, $0.name) < ($1.connected ? 0 : 1, $1.name) }
+            }
+        case (0x5B, _):
+            guard p.count >= 4 else { return }
+            if p[2] == 0xFF || p[2] < 20 {
+                soundLevel = nil
+                switch p[3] {
+                case 0x03: soundLevelNote = "Measuring…"
+                case 0x01: soundLevelNote = "Not measured during calls"
+                case 0x02: soundLevelNote = "Put the headphones on to measure"
+                default: soundLevelNote = "Play something to measure"
+                }
+            } else {
+                soundLevel = Int(p[2])
+                soundLevelNote = nil
             }
         case (0x37, 0x01), (0x39, 0x01):
             playbackFixed = p[2] == 0x00

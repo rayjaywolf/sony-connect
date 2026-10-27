@@ -47,6 +47,8 @@ struct Panel: View {
         }
         .padding(16)
         .frame(width: 330)
+        .onAppear { headphones.startSoundLevel() }
+        .onDisappear { headphones.stopSoundLevel() }
     }
 
     private var header: some View {
@@ -121,6 +123,8 @@ struct Panel: View {
                     .labelsHidden()
                 }
             }
+
+            SoundLevelRow(level: headphones.soundLevel, note: headphones.soundLevelNote)
 
             Divider()
 
@@ -349,6 +353,48 @@ struct EqualizerBands: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+struct SoundLevelRow: View {
+    let level: Int?
+    let note: String?
+
+    private let range = 40.0...100.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Sound level")
+                Spacer()
+                if let level {
+                    Text("\(level) dB")
+                        .monospacedDigit()
+                        .foregroundStyle(level >= 85 ? .red : .secondary)
+                } else {
+                    Text(note ?? "Measuring…")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            GeometryReader { geometry in
+                let fraction = level.map { min(max((Double($0) - range.lowerBound) / (range.upperBound - range.lowerBound), 0), 1) } ?? 0
+                let limit = (85 - range.lowerBound) / (range.upperBound - range.lowerBound)
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.2))
+                    Capsule()
+                        .fill((level ?? 0) >= 85 ? Color.red : Color.accentColor)
+                        .frame(width: geometry.size.width * fraction)
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.6))
+                        .frame(width: 1)
+                        .offset(x: geometry.size.width * limit)
+                }
+            }
+            .frame(height: 4)
+            .animation(.easeOut(duration: 0.3), value: level)
+        }
+        .help("Measured by the headphones. Long listening at 85 dB or above can damage hearing.")
     }
 }
 
