@@ -2,46 +2,17 @@ import AppKit
 
 enum MenuBarIcon {
     static let image: NSImage = {
-        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
-            draw(in: rect)
-            return true
+        let image = NSImage(size: NSSize(width: 18, height: 18))
+        for encoded in [scale2, scale3] {
+            guard let data = Data(base64Encoded: encoded), let rep = NSBitmapImageRep(data: data) else { continue }
+            rep.size = NSSize(width: 18, height: 18)
+            image.addRepresentation(rep)
         }
         image.isTemplate = true
         return image
     }()
 
-    private static func draw(in rect: NSRect) {
-        let s = rect.width / 18
-        func p(_ x: CGFloat, _ y: CGFloat) -> NSPoint { NSPoint(x: rect.minX + x * s, y: rect.minY + y * s) }
-        NSColor.black.setStroke()
-        NSColor.black.setFill()
+    private static let scale2 = "iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAAEqElEQVR4nK2YT4jVVRTHP+/NaP5BK9TESsVFuLGMtOzPRpDAklwkGbiooE2LFqEFhZu2gdCqFkHLwjZpgVliCxdakuVQQpSRaOGftBSzsZl5731a3HN5d977vZl5zRz4cf+f+z3n3HvOub+ayjRpAGhGfTPwHPAocBvwF3Ac+AjYH3PqQKsnN3U630CUK9R9TkxH1NUxv96L53TAZKZr1fOxaUsdUxsFkEbR/k1dotbi6+Jb/59mqgMCdwMHgWVAI/oGw4ynga+jXgdGY/4bMW9gJk2WTXU4JB9Tm1H/RX1Gna3OV68UmmqpZ9U5sb5LS9MB80IFmJPqHR0mPVTMUx1W7+wFqF+T1Ug3ZB7wZqg+02XgKeAPYFaYpBamo5h7I75K6hfQQDB+FlgZ4GrBZyfwe4AZi3mSrj60r/oZ4Hqs6/I5/QLKTF8MZs0AeQL4IOpjHWuuRpk3P1UI10X9AMoObTWwoYPp61RIG9TpBIcm26QfQABbSVd7NADtA75kvMcuKYPOJvo52pUC9AMoS/p4lIPAMLCLHuchaEUBrAZcmAlA+XbdDjxI27G9SzqkA3SbJm94GLgZc84GoN4C9Ol7NoUvaanX1WXhS6piU+5bof4b67ZG32CvvQb70BDAk0X7i5C2PDt12mEla+0+4JYYv9ihvS6aKqDM4PsoR4CPA1j+BkjxLJsug1wQ5TBwaaYAEZuei/peUo6TtWCAWQ48D6wF5gLfAatizVXaTnLagLJZHo72sQCSfdMCUhTfQfLgmbYU9cvA38xAgpYP54ApujfVIXW9Olddo35rm3I+1CjqTfWGuqPjkvSdoGUwy9WjxaYHTNnfKfVmAaRlNbWK8omJQE0Gpq4uNuU4edNz6iJTqpGp6XhqRV+jGMvl5eBZmTVOxfd8EoyGo9yu7o76aIVWGlZT03ZOtMse/mgyME8Hg5Eoz6v3qNdig04wpTaOm0w7VIyPxJrPOvaZ1DHma5mjeG4fANYAt8atK0NPTkXeB94B5sTtu0pyGbtJgVlgabFmHFUBytfyXmBd9OWIfRJ4oAMkMX8AeBU4BLxH20UAfA68BPwKvEK6/lAR0yYCtCnqjWLscoDM3hnamtlP8t4/kkJF9jU10gPyqxByC3ClELTkXwkoI15fMVaV82RgbwFvB5hRYHYxZ5T0VHoN2AMsquDdE1CmJcWGGeQyUgph8dVJmvuHpFVJeXXnPgLbSOdoOPq7ztBE+VA5OWthA/ANbZNloNdIh3ge481Zrq+FkBdDqCkn+ZlZqYk8bzPpYP7ewXApSeo/aQfbkoz+S6QD3Ql4QkCZDjM+vWiQrvsW0hWuk7TYBBaSguqHtJ/NWZgW6SVSj/EG7edUN1U4xezS56inC++bw8F1daW6P8Zu2g64i9Ufenjqo6andd0ePxqm4qk3Ft64fDKfUBeqn3Zsule9S90TwlxRz0R7fiFwz5A1lVi23XZOrCl+qR4zZQEvqxcKsEPqNvUR9TF1nuO1P2GGMVn6kUHdrx60O3aNqDvVh2z/VMh0Ut0c62dNBYxKTSf9pVc6w42krHAdyfFdiMP/U/StIsWuI6RHwA0mfrN10X8eaWxxjhqRRAAAAABJRU5ErkJggg=="
 
-        let slider = NSBezierPath()
-        slider.move(to: p(3.9, 9.4))
-        slider.curve(to: p(9, 16.9), controlPoint1: p(3.6, 14.6), controlPoint2: p(5.6, 16.9))
-        slider.curve(to: p(14.1, 9.4), controlPoint1: p(12.4, 16.9), controlPoint2: p(14.4, 14.6))
-        slider.lineWidth = 0.9 * s
-        slider.lineCapStyle = .round
-        slider.stroke()
-
-        let pad = NSBezierPath()
-        pad.move(to: p(5.6, 14.4))
-        pad.curve(to: p(12.4, 14.4), controlPoint1: p(7.2, 16.1), controlPoint2: p(10.8, 16.1))
-        pad.lineWidth = 2.4 * s
-        pad.lineCapStyle = .round
-        pad.stroke()
-
-        for (x, inner) in [(CGFloat(3.9), CGFloat(1)), (14.1, -1)] {
-            let cup = NSBezierPath(
-                roundedRect: NSRect(origin: p(x - 2.5, 0.8), size: NSSize(width: 5 * s, height: 9.2 * s)),
-                xRadius: 2.5 * s, yRadius: 2.9 * s
-            )
-            cup.append(NSBezierPath(
-                roundedRect: NSRect(origin: p(x + inner * 1.1 - 0.35, 2.4), size: NSSize(width: 0.7 * s, height: 6 * s)),
-                xRadius: 0.35 * s, yRadius: 0.35 * s
-            ))
-            cup.windingRule = .evenOdd
-            cup.fill()
-        }
-    }
+    private static let scale3 = "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"
 }
