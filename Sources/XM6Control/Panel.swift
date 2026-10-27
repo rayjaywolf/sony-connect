@@ -54,7 +54,7 @@ struct Panel: View {
             SectionLabel("Noise control")
             TilePicker(
                 options: [
-                    TileOption(value: NoiseMode.noiseCancelling, title: "Noise cancelling", symbol: "waveform.badge.minus"),
+                    TileOption(value: NoiseMode.noiseCancelling, title: "NC", symbol: "waveform.badge.minus"),
                     TileOption(value: NoiseMode.ambient, title: "Ambient", symbol: "ear"),
                     TileOption(value: NoiseMode.off, title: "Off", symbol: "circle.slash"),
                 ],
