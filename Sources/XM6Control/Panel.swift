@@ -26,6 +26,7 @@ struct Panel: View {
         }
         .padding(12)
         .frame(width: 666)
+        .background(TopAnchor())
         .animation(.smooth(duration: 0.3), value: isConnected)
         .onAppear { headphones.startSoundLevel() }
         .onDisappear { headphones.stopSoundLevel() }
