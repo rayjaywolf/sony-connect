@@ -170,7 +170,6 @@ struct ToggleRow: View {
     let symbol: String
     var artwork: NSImage?
     @Binding var isOn: Bool
-    @Environment(\.cardTint) private var tint
 
     var body: some View {
         HStack(spacing: 10) {
@@ -180,8 +179,8 @@ struct ToggleRow: View {
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()
-                    .frame(width: 40, height: 26)
-                    .foregroundStyle(isOn ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(Color.secondary))
+                    .frame(width: 46, height: 26)
+                    .foregroundStyle(Color.white.opacity(isOn ? 1 : 0.4))
                     .animation(.smooth(duration: 0.25), value: isOn)
             } else {
                 IconBadge(symbol: symbol, active: isOn)
