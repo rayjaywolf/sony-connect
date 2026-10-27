@@ -36,22 +36,30 @@ final class TopAnchorView: NSView {
     }
 
     private func pin() {
-        guard !pinning, let window, let top = menuBarBottom(for: window) else { return }
+        guard !pinning, let window else { return }
+        let statusItem = statusItemWindow(for: window)
+        guard let top = statusItem.map({ $0.frame.minY - 2 }) ?? window.screen.map({ $0.frame.maxY - NSStatusBar.system.thickness - 2 }) else { return }
         let height = (bounds.height * 2).rounded() / 2
         guard height > 1 else { return }
-        let target = NSRect(x: window.frame.minX, y: top - height, width: window.frame.width, height: height)
-        guard abs(window.frame.maxY - top) > 0.5 || abs(window.frame.height - height) > 0.5 else { return }
+        let width = window.frame.width
+        var x = window.frame.minX
+        if let statusItem {
+            x = (statusItem.frame.midX - width / 2).rounded()
+            if let screen = statusItem.screen ?? window.screen {
+                let bounds = screen.visibleFrame.insetBy(dx: 8, dy: 0)
+                x = min(max(x, bounds.minX), bounds.maxX - width)
+            }
+        }
+        let target = NSRect(x: x, y: top - height, width: width, height: height)
+        guard abs(window.frame.minX - x) > 0.5 || abs(window.frame.maxY - top) > 0.5 || abs(window.frame.height - height) > 0.5 else { return }
         pinning = true
         window.setFrame(target, display: true, animate: false)
         pinning = false
     }
 
-    private func menuBarBottom(for window: NSWindow) -> CGFloat? {
-        let statusBar = NSApp.windows.first {
-            $0 !== window && String(describing: type(of: $0)).contains("StatusBar") && $0.screen == window.screen
+    private func statusItemWindow(for window: NSWindow) -> NSWindow? {
+        NSApp.windows.first {
+            $0 !== window && String(describing: type(of: $0)).contains("StatusBar") && $0.frame.width < 200
         }
-        if let statusBar { return statusBar.frame.minY - 2 }
-        guard let screen = window.screen else { return nil }
-        return screen.frame.maxY - (NSStatusBar.system.thickness) - 2
     }
 }
