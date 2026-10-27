@@ -7,9 +7,9 @@
 	<key>CFBundleIdentifier</key>
 	<string>com.rayjay.xm6control</string>
 	<key>CFBundleName</key>
-	<string>XM6 Control</string>
+	<string>Sony Connect</string>
 	<key>CFBundleDisplayName</key>
-	<string>XM6 Control</string>
+	<string>Sony Connect</string>
 	<key>CFBundleExecutable</key>
 	<string>XM6Control</string>
 	<key>CFBundlePackageType</key>
@@ -23,6 +23,6 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>XM6 Control connects to your headphones over Bluetooth to change noise cancelling and other settings.</string>
+	<string>Sony Connect connects to your headphones over Bluetooth to change noise cancelling and other settings.</string>
 </dict>
 </plist>
