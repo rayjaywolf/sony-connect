@@ -186,8 +186,10 @@ struct ToggleRow: View {
                 IconBadge(symbol: symbol, active: isOn)
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: 13))
+                if artwork == nil {
+                    Text(title)
+                        .font(.system(size: 13))
+                }
                 if let detail {
                     Text(detail)
                         .font(.system(size: 11))
