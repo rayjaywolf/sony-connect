@@ -10,6 +10,15 @@ enum ListeningMode: Hashable {
     case standard, backgroundMusic, cinema
 }
 
+struct PairedDevice: Identifiable, Equatable {
+    let address: String
+    let name: String
+    let connected: Bool
+    let playing: Bool
+
+    var id: String { address }
+}
+
 enum RoomSize: UInt8, Hashable {
     case myRoom = 0x00
     case livingRoom = 0x01
@@ -36,6 +45,9 @@ final class Headphones: NSObject, ObservableObject {
     @Published private(set) var speakToChat = false
     @Published private(set) var listeningMode: ListeningMode = .standard
     @Published private(set) var roomSize: RoomSize = .myRoom
+    @Published private(set) var devices: [PairedDevice] = []
+    @Published private(set) var playbackFixed = false
+    @Published private(set) var switchFailure: String?
     @Published var ambientLevel: Double = 10
     @Published var volume: Double = 15
 
@@ -52,7 +64,7 @@ final class Headphones: NSObject, ObservableObject {
     private var channel: IOBluetoothRFCOMMChannel?
     private var reader = FrameReader()
     private var seq: UInt8 = 0
-    private var pending: (id: UUID, expects: Set<UInt8>, type: UInt8?, done: CheckedContinuation<[UInt8]?, Never>)?
+    private var pending: (id: UUID, dataType: UInt8, expects: Set<UInt8>, type: UInt8?, done: CheckedContinuation<[UInt8]?, Never>)?
     private var openWaiter: CheckedContinuation<Bool, Never>?
     private var sdpWaiter: CheckedContinuation<Void, Never>?
     private var queueTail: Task<Void, Never>?
@@ -61,6 +73,7 @@ final class Headphones: NSObject, ObservableObject {
     private var speakToChatSensitivity: UInt8 = 0x01
     private var speakToChatTimeout: UInt8 = 0x01
     private var recentReconnects: [Date] = []
+    private var deviceListType: UInt8 = 0x02
 
     func start() {
         connectNotification = IOBluetoothDevice.register(
@@ -152,6 +165,41 @@ final class Headphones: NSObject, ObservableObject {
         await request([0xF6, 0x02])
         await request([0xE6, 0x09])
         await request([0xE6, 0x04])
+        await refreshDevices()
+        await request([0x36, 0x01], on: Frame.dataMdr2)
+    }
+
+    func refreshDevices() async {
+        if await request([0x36, 0x02], on: Frame.dataMdr2) != nil {
+            deviceListType = 0x02
+        } else if await request([0x36, 0x00], on: Frame.dataMdr2) != nil {
+            deviceListType = 0x00
+        }
+    }
+
+    func playOn(_ device: PairedDevice) {
+        switchFailure = nil
+        devices = devices.map {
+            PairedDevice(address: $0.address, name: $0.name, connected: $0.connected, playing: $0.address == device.address)
+        }
+        Task {
+            await request([0x3C, 0x01] + Array(device.address.utf8), on: Frame.dataMdr2)
+            try? await Task.sleep(for: .seconds(1))
+            await refreshDevices()
+        }
+    }
+
+    func setConnected(_ device: PairedDevice, _ connect: Bool) {
+        Task {
+            await request([0x3C, deviceListType, connect ? 0x01 : 0x00] + Array(device.address.utf8), on: Frame.dataMdr2, timeout: 1.5)
+            try? await Task.sleep(for: .seconds(connect ? 4 : 2))
+            await refreshDevices()
+        }
+    }
+
+    func setPlaybackFixed(_ fixed: Bool) {
+        playbackFixed = fixed
+        Task { await request([0x38, 0x01, fixed ? 0x00 : 0x01], on: Frame.dataMdr2) }
     }
 
     func setListeningMode(_ newMode: ListeningMode) {
@@ -225,22 +273,22 @@ final class Headphones: NSObject, ObservableObject {
     }
 
     @discardableResult
-    private func request(_ payload: [UInt8], timeout: Double = 3) async -> [UInt8]? {
+    private func request(_ payload: [UInt8], on dataType: UInt8 = Frame.dataMdr, timeout: Double = 3) async -> [UInt8]? {
         let previous = queueTail
         let task = Task { () -> [UInt8]? in
             await previous?.value
-            return await self.transmit(payload, timeout: timeout)
+            return await self.transmit(payload, on: dataType, timeout: timeout)
         }
         queueTail = Task { _ = await task.value }
         return await task.value
     }
 
-    private func transmit(_ payload: [UInt8], timeout: Double) async -> [UInt8]? {
+    private func transmit(_ payload: [UInt8], on dataType: UInt8, timeout: Double) async -> [UInt8]? {
         guard let channel, channel.isOpen(), let command = payload.first else { return nil }
         let id = UUID()
         return await withCheckedContinuation { continuation in
-            pending = (id, [command, command &+ 1], payload.count > 1 ? payload[1] : nil, continuation)
-            let packet = Frame.pack(type: Frame.dataMdr, seq: seq, payload: payload)
+            pending = (id, dataType, [command, command &+ 1], payload.count > 1 ? payload[1] : nil, continuation)
+            let packet = Frame.pack(type: dataType, seq: seq, payload: payload)
             log.info("TX seq=\(self.seq, privacy: .public) \(Self.hex(payload), privacy: .public)")
             guard write(packet, to: channel) else {
                 finish(id, with: nil)
@@ -284,9 +332,13 @@ final class Headphones: NSObject, ObservableObject {
                 continue
             }
             guard let command = message.payload.first else { continue }
-            log.info("RX \(Self.hex(message.payload), privacy: .public)")
-            apply(message.payload)
-            if let current = pending, current.expects.contains(command),
+            log.info("RX \(message.type == Frame.dataMdr2 ? "T2 " : "", privacy: .public)\(Self.hex(message.payload), privacy: .public)")
+            if message.type == Frame.dataMdr2 {
+                applyPeripheral(message.payload)
+            } else {
+                apply(message.payload)
+            }
+            if let current = pending, current.dataType == message.type, current.expects.contains(command),
                current.type == nil || (message.payload.count > 1 && message.payload[1] == current.type) {
                 finish(current.id, with: message.payload)
             }
@@ -356,6 +408,69 @@ final class Headphones: NSObject, ObservableObject {
         Task {
             try? await Task.sleep(for: .seconds(2))
             await connect(userInitiated: false)
+        }
+    }
+
+    private func applyPeripheral(_ p: [UInt8]) {
+        guard p.count >= 3 else { return }
+        switch (p[0], p[1]) {
+        case (0x37, 0x00), (0x39, 0x00), (0x37, 0x02), (0x39, 0x02):
+            if let parsed = Self.parseDevices(p, withClassOfDevice: p[1] == 0x02) {
+                devices = parsed.sorted { ($0.connected ? 0 : 1, $0.name) < ($1.connected ? 0 : 1, $1.name) }
+            }
+        case (0x37, 0x01), (0x39, 0x01):
+            playbackFixed = p[2] == 0x00
+        case (0x3D, 0x01):
+            guard p.count >= 20 else { return }
+            let target = String(decoding: p[3..<20], as: UTF8.self)
+            if p[2] == 0x00 {
+                devices = devices.map {
+                    PairedDevice(address: $0.address, name: $0.name, connected: $0.connected, playing: $0.address == target)
+                }
+            } else {
+                switchFailure = Self.switchFailureMessage(p[2])
+                Task { await refreshDevices() }
+            }
+        default:
+            break
+        }
+    }
+
+    private static func parseDevices(_ p: [UInt8], withClassOfDevice: Bool) -> [PairedDevice]? {
+        var index = 2
+        let count = Int(p[index])
+        index += 1
+        var entries: [(address: String, slot: UInt8, name: String)] = []
+        for _ in 0..<count {
+            guard index + 18 <= p.count else { return nil }
+            let address = String(decoding: p[index..<(index + 17)], as: UTF8.self)
+            let slot = p[index + 17]
+            index += 18 + (withClassOfDevice ? 3 : 0)
+            guard index < p.count else { return nil }
+            let nameLength = Int(p[index])
+            index += 1
+            guard index + nameLength <= p.count else { return nil }
+            let name = String(decoding: p[index..<(index + nameLength)], as: UTF8.self)
+            index += nameLength
+            entries.append((address, slot, name))
+        }
+        let playbackSlot: UInt8? = index < p.count ? p[index] : nil
+        return entries.map {
+            PairedDevice(
+                address: $0.address,
+                name: $0.name.isEmpty ? $0.address : $0.name,
+                connected: $0.slot != 0,
+                playing: $0.slot != 0 && $0.slot == playbackSlot
+            )
+        }
+    }
+
+    private static func switchFailureMessage(_ code: UInt8) -> String {
+        switch code {
+        case 0x02: "Couldn't switch while you're on a call."
+        case 0x03: "Couldn't switch: that device isn't connected for audio."
+        case 0x04: "Couldn't switch while a voice assistant is active."
+        default: "The headphones didn't switch devices. Try again."
         }
     }
 

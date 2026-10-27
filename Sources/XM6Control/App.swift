@@ -124,6 +124,10 @@ struct Panel: View {
 
             Divider()
 
+            devicesSection
+
+            Divider()
+
             VStack(alignment: .leading, spacing: 6) {
                 LabeledValue(title: "Headphone volume", value: Int(headphones.volume))
                 Slider(value: $headphones.volume, in: 0...30, step: 1) { editing in
@@ -142,6 +146,36 @@ struct Panel: View {
                 get: { headphones.speakToChat },
                 set: { headphones.setSpeakToChat($0) }
             ))
+        }
+    }
+
+    private var devicesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Devices")
+            if headphones.devices.isEmpty {
+                Text("Reading paired devices…")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(headphones.devices) { device in
+                DeviceRow(device: device, playbackFixed: headphones.playbackFixed) {
+                    headphones.playOn(device)
+                } connect: {
+                    headphones.setConnected(device, true)
+                } disconnect: {
+                    headphones.setConnected(device, false)
+                }
+            }
+            if let failure = headphones.switchFailure {
+                Text(failure)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let playing = headphones.devices.first(where: \.playing) {
+                SwitchRow(title: "Keep playback on \(playing.name)", isOn: Binding(
+                    get: { headphones.playbackFixed },
+                    set: { headphones.setPlaybackFixed($0) }
+                ))
+            }
         }
     }
 
@@ -213,6 +247,54 @@ final class LoginItem: ObservableObject {
             NSLog("Login item change failed: \(error.localizedDescription)")
         }
         isEnabled = SMAppService.mainApp.status == .enabled
+    }
+}
+
+struct DeviceRow: View {
+    let device: PairedDevice
+    let playbackFixed: Bool
+    let play: () -> Void
+    let connect: () -> Void
+    let disconnect: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(device.name)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(statusText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if device.playing {
+                Image(systemName: playbackFixed ? "lock.fill" : "speaker.wave.2.fill")
+                    .foregroundStyle(.secondary)
+                    .help(playbackFixed ? "Playback is kept on this device" : "Playing on this device")
+            } else if device.connected {
+                Button("Play here", action: play)
+                    .controlSize(.small)
+            } else {
+                Button("Connect", action: connect)
+                    .controlSize(.small)
+            }
+        }
+        .contextMenu {
+            if device.connected {
+                if !device.playing {
+                    Button("Play on \(device.name)", action: play)
+                }
+                Button("Disconnect \(device.name)", action: disconnect)
+            } else {
+                Button("Connect \(device.name)", action: connect)
+            }
+        }
+    }
+
+    private var statusText: String {
+        if device.playing { return playbackFixed ? "Playing, kept on this device" : "Playing" }
+        return device.connected ? "Connected" : "Not connected"
     }
 }
 

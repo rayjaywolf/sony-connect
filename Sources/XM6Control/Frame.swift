@@ -6,6 +6,7 @@ enum Frame {
     static let escape: UInt8 = 0x3D
     static let ack: UInt8 = 0x01
     static let dataMdr: UInt8 = 0x0C
+    static let dataMdr2: UInt8 = 0x0E
 
     struct Message {
         let type: UInt8
