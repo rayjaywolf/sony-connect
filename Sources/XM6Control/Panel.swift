@@ -146,6 +146,7 @@ struct Panel: View {
                 title: "DSEE Extreme",
                 detail: "Restores detail in compressed music",
                 symbol: "sparkles",
+                artwork: Artwork.dsee,
                 isOn: Binding(get: { headphones.dsee }, set: headphones.setDSEE)
             )
         }
@@ -231,14 +232,13 @@ struct Header: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(isConnected ? AnyShapeStyle(headphones.mode.tint.gradient) : AnyShapeStyle(Color.primary.opacity(0.07)))
-                Image(systemName: "headphones")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(isConnected ? Color.white : Color.secondary)
-            }
-            .frame(width: 34, height: 34)
+            Image(nsImage: Artwork.headphones)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: 30, height: 38)
+                .saturation(isConnected ? 1 : 0)
+                .opacity(isConnected ? 1 : 0.45)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(headphones.name)

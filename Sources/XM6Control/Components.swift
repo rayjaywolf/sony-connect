@@ -168,11 +168,24 @@ struct ToggleRow: View {
     let title: String
     var detail: String?
     let symbol: String
+    var artwork: NSImage?
     @Binding var isOn: Bool
+    @Environment(\.cardTint) private var tint
 
     var body: some View {
         HStack(spacing: 10) {
-            IconBadge(symbol: symbol, active: isOn)
+            if let artwork {
+                Image(nsImage: artwork)
+                    .renderingMode(.template)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(width: 40, height: 26)
+                    .foregroundStyle(isOn ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(Color.secondary))
+                    .animation(.smooth(duration: 0.25), value: isOn)
+            } else {
+                IconBadge(symbol: symbol, active: isOn)
+            }
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.system(size: 13))
