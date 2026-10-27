@@ -25,7 +25,7 @@ struct XM6ControlApp: App {
         MenuBarExtra {
             Panel(headphones: delegate.headphones, loginItem: delegate.loginItem, state: delegate.panelState)
         } label: {
-            Image(systemName: "headphones")
+            Image(nsImage: MenuBarIcon.image)
         }
         .menuBarExtraStyle(.window)
     }
