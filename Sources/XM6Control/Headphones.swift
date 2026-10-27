@@ -6,6 +6,16 @@ enum NoiseMode: Hashable {
     case noiseCancelling, ambient, off
 }
 
+enum ListeningMode: Hashable {
+    case standard, backgroundMusic, cinema
+}
+
+enum RoomSize: UInt8, Hashable {
+    case myRoom = 0x00
+    case livingRoom = 0x01
+    case cafe = 0x02
+}
+
 @MainActor
 final class Headphones: NSObject, ObservableObject {
     enum Status: Equatable {
@@ -24,6 +34,8 @@ final class Headphones: NSObject, ObservableObject {
     @Published private(set) var focusOnVoice = false
     @Published private(set) var dsee = false
     @Published private(set) var speakToChat = false
+    @Published private(set) var listeningMode: ListeningMode = .standard
+    @Published private(set) var roomSize: RoomSize = .myRoom
     @Published var ambientLevel: Double = 10
     @Published var volume: Double = 15
 
@@ -32,13 +44,15 @@ final class Headphones: NSObject, ObservableObject {
         [0x96, 0xCC, 0x20, 0x3E, 0x50, 0x68, 0x46, 0xAD, 0xB3, 0x2D, 0xE3, 0x16, 0xF5, 0xE0, 0x69, 0xBA],
     ]
     private static let fallbackChannel: BluetoothRFCOMMChannelID = 9
+    private static let on: UInt8 = 0x00
+    private static let off: UInt8 = 0x01
 
     private let log = Logger(subsystem: "com.rayjay.xm6control", category: "bluetooth")
     private var device: IOBluetoothDevice?
     private var channel: IOBluetoothRFCOMMChannel?
     private var reader = FrameReader()
     private var seq: UInt8 = 0
-    private var pending: (id: UUID, expects: Set<UInt8>, done: CheckedContinuation<[UInt8]?, Never>)?
+    private var pending: (id: UUID, expects: Set<UInt8>, type: UInt8?, done: CheckedContinuation<[UInt8]?, Never>)?
     private var openWaiter: CheckedContinuation<Bool, Never>?
     private var sdpWaiter: CheckedContinuation<Void, Never>?
     private var queueTail: Task<Void, Never>?
@@ -136,6 +150,32 @@ final class Headphones: NSObject, ObservableObject {
         await request([0xA6, 0x20])
         await request([0xE6, 0x01])
         await request([0xF6, 0x02])
+        await request([0xE6, 0x09])
+        await request([0xE6, 0x04])
+    }
+
+    func setListeningMode(_ newMode: ListeningMode) {
+        listeningMode = newMode
+        let room = roomSize.rawValue
+        Task {
+            switch newMode {
+            case .standard:
+                await request([0xE8, 0x09, Self.off, room])
+                await request([0xE8, 0x04, Self.off])
+            case .backgroundMusic:
+                await request([0xE8, 0x04, Self.off])
+                await request([0xE8, 0x09, Self.on, room])
+            case .cinema:
+                await request([0xE8, 0x09, Self.off, room])
+                await request([0xE8, 0x04, Self.on])
+            }
+        }
+    }
+
+    func setRoomSize(_ size: RoomSize) {
+        roomSize = size
+        guard listeningMode == .backgroundMusic else { return }
+        Task { await request([0xE8, 0x09, Self.on, size.rawValue]) }
     }
 
     func setMode(_ newMode: NoiseMode) {
@@ -199,7 +239,7 @@ final class Headphones: NSObject, ObservableObject {
         guard let channel, channel.isOpen(), let command = payload.first else { return nil }
         let id = UUID()
         return await withCheckedContinuation { continuation in
-            pending = (id, [command, command &+ 1], continuation)
+            pending = (id, [command, command &+ 1], payload.count > 1 ? payload[1] : nil, continuation)
             let packet = Frame.pack(type: Frame.dataMdr, seq: seq, payload: payload)
             log.info("TX seq=\(self.seq, privacy: .public) \(Self.hex(payload), privacy: .public)")
             guard write(packet, to: channel) else {
@@ -246,7 +286,8 @@ final class Headphones: NSObject, ObservableObject {
             guard let command = message.payload.first else { continue }
             log.info("RX \(Self.hex(message.payload), privacy: .public)")
             apply(message.payload)
-            if let current = pending, current.expects.contains(command) {
+            if let current = pending, current.expects.contains(command),
+               current.type == nil || (message.payload.count > 1 && message.payload[1] == current.type) {
                 finish(current.id, with: message.payload)
             }
         }
@@ -272,7 +313,27 @@ final class Headphones: NSObject, ObservableObject {
             volume = Double(p[2])
         case 0xE7, 0xE9:
             guard p.count >= 3 else { return }
-            dsee = p[2] != 0
+            switch p[1] {
+            case 0x01:
+                dsee = p[2] != 0
+            case 0x03, 0x09:
+                if p[2] == Self.on {
+                    listeningMode = .backgroundMusic
+                } else if listeningMode == .backgroundMusic {
+                    listeningMode = .standard
+                }
+                if p.count >= 4, let size = RoomSize(rawValue: p[3]) {
+                    roomSize = size
+                }
+            case 0x04:
+                if p[2] == Self.on {
+                    listeningMode = .cinema
+                } else if listeningMode == .cinema {
+                    listeningMode = .standard
+                }
+            default:
+                break
+            }
         case 0xF7, 0xF9:
             guard p.count >= 3 else { return }
             speakToChat = p[2] != 0

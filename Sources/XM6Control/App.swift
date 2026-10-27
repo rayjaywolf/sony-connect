@@ -46,7 +46,7 @@ struct Panel: View {
             footer
         }
         .padding(16)
-        .frame(width: 300)
+        .frame(width: 330)
     }
 
     private var header: some View {
@@ -90,6 +90,35 @@ struct Panel: View {
                         get: { headphones.focusOnVoice },
                         set: { headphones.setFocusOnVoice($0) }
                     ))
+                }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Listening mode")
+                Picker("Listening mode", selection: Binding(
+                    get: { headphones.listeningMode },
+                    set: { headphones.setListeningMode($0) }
+                )) {
+                    Text("Standard").tag(ListeningMode.standard)
+                    Text("Background music").tag(ListeningMode.backgroundMusic)
+                    Text("Cinema").tag(ListeningMode.cinema)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                if headphones.listeningMode == .backgroundMusic {
+                    Picker("Room size", selection: Binding(
+                        get: { headphones.roomSize },
+                        set: { headphones.setRoomSize($0) }
+                    )) {
+                        Text("My room").tag(RoomSize.myRoom)
+                        Text("Living room").tag(RoomSize.livingRoom)
+                        Text("Café").tag(RoomSize.cafe)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
                 }
             }
 
