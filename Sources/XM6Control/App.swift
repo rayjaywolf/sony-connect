@@ -340,19 +340,69 @@ struct EqualizerBands: View {
                 .font(.caption2)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
-            Slider(value: value, in: headphones.eqBandRange, step: 1) { editing in
-                if !editing { headphones.commitEqBands() }
+            VerticalSlider(value: value, range: headphones.eqBandRange) {
+                headphones.commitEqBands()
             }
-            .labelsHidden()
-            .controlSize(.mini)
-            .frame(width: 110)
-            .rotationEffect(.degrees(-90))
-            .frame(width: 28, height: 110)
+            .frame(width: 22, height: 110)
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+struct VerticalSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let onCommit: () -> Void
+
+    private let knob: CGFloat = 12
+
+    var body: some View {
+        GeometryReader { geometry in
+            let height = geometry.size.height
+            let travel = height - knob
+            let zeroY = position(for: 0, travel: travel)
+            let valueY = position(for: value, travel: travel)
+            ZStack(alignment: .top) {
+                Capsule()
+                    .fill(Color.secondary.opacity(0.25))
+                    .frame(width: 4)
+                    .frame(maxHeight: .infinity)
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.5))
+                    .frame(width: 10, height: 1)
+                    .offset(y: zeroY + knob / 2)
+                Capsule()
+                    .fill(Color.accentColor)
+                    .frame(width: 4, height: abs(zeroY - valueY))
+                    .offset(y: min(zeroY, valueY) + knob / 2)
+                Circle()
+                    .fill(Color.white)
+                    .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
+                    .frame(width: knob, height: knob)
+                    .offset(y: valueY)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        let fraction = 1 - min(max((drag.location.y - knob / 2) / travel, 0), 1)
+                        let raw = range.lowerBound + fraction * (range.upperBound - range.lowerBound)
+                        let stepped = raw.rounded()
+                        if stepped != value { value = stepped }
+                    }
+                    .onEnded { _ in onCommit() }
+            )
+        }
+    }
+
+    private func position(for v: Double, travel: CGFloat) -> CGFloat {
+        let span = range.upperBound - range.lowerBound
+        let fraction = span == 0 ? 0.5 : (v - range.lowerBound) / span
+        return travel * (1 - CGFloat(fraction))
     }
 }
 
