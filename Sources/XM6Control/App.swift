@@ -150,8 +150,8 @@ struct Panel: View {
     }
 
     private var devicesSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Devices")
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 8) {
             if headphones.devices.isEmpty {
                 Text("Reading paired devices…")
                     .foregroundStyle(.secondary)
@@ -175,6 +175,24 @@ struct Panel: View {
                     get: { headphones.playbackFixed },
                     set: { headphones.setPlaybackFixed($0) }
                 ))
+            }
+            }
+            .padding(.top, 6)
+        } label: {
+            HStack {
+                Text("Devices")
+                Spacer()
+                if let playing = headphones.devices.first(where: \.playing) {
+                    if headphones.playbackFixed {
+                        Image(systemName: "lock.fill")
+                            .imageScale(.small)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(playing.name)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
