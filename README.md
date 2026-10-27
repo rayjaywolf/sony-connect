@@ -12,7 +12,7 @@ I've only tested it with my own XM6 (firmware 3.1.5) on macOS 27. Other Sony hea
 - Listening mode: Standard, Background music (with My room, Living room and Café) and Cinema
 - Volume
 - Live sound level in dB from the headphones' own sensor
-- DSEE Extreme on and off
+- DSEE Extreme and Speak-to-chat on and off
 - Equalizer: the built-in presets, your custom presets, the 10-band editor and Clear Bass
 - Shows which of your devices are connected, lets you move playback to another one or disconnect it, and has the Keep playback here option
 - Battery level in the menu bar panel

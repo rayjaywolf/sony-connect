@@ -149,6 +149,13 @@ struct Panel: View {
                 artwork: Artwork.dsee,
                 isOn: Binding(get: { headphones.dsee }, set: headphones.setDSEE)
             )
+            Divider().opacity(0.6)
+            ToggleRow(
+                title: "Speak-to-chat",
+                detail: "Pauses music and lets sound in when you talk",
+                symbol: "bubble.left.and.text.bubble.right",
+                isOn: Binding(get: { headphones.speakToChat }, set: headphones.setSpeakToChat)
+            )
         }
     }
 
