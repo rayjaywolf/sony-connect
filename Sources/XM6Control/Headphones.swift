@@ -46,6 +46,7 @@ final class Headphones: NSObject, ObservableObject {
     private var batteryTimer: Timer?
     private var speakToChatSensitivity: UInt8 = 0x01
     private var speakToChatTimeout: UInt8 = 0x01
+    private var recentReconnects: [Date] = []
 
     func start() {
         connectNotification = IOBluetoothDevice.register(
@@ -123,9 +124,10 @@ final class Headphones: NSObject, ObservableObject {
     }
 
     func disconnect() {
-        channel?.close()
-        tearDown()
         status = .disconnected
+        let closing = channel
+        tearDown()
+        closing?.close()
     }
 
     func refresh() async {
@@ -283,6 +285,19 @@ final class Headphones: NSObject, ObservableObject {
         }
     }
 
+    private func reconnectAfterDrop() {
+        let now = Date()
+        recentReconnects = recentReconnects.filter { now.timeIntervalSince($0) < 60 } + [now]
+        guard recentReconnects.count <= 3 else {
+            log.info("Not reconnecting, too many drops in the last minute")
+            return
+        }
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            await connect(userInitiated: false)
+        }
+    }
+
     private func tearDown() {
         channel = nil
         reader.reset()
@@ -369,7 +384,9 @@ extension Headphones: IOBluetoothRFCOMMChannelDelegate {
             log.info("RFCOMM channel closed")
             resolveOpen(false)
             tearDown()
-            if status == .connected { status = .disconnected }
+            guard status == .connected else { return }
+            status = .disconnected
+            reconnectAfterDrop()
         }
     }
 }
