@@ -25,20 +25,26 @@ struct Panel: View {
                 .padding(.top, 2)
         }
         .padding(12)
-        .frame(width: 340)
+        .frame(width: 666)
         .animation(.smooth(duration: 0.3), value: isConnected)
         .onAppear { headphones.startSoundLevel() }
         .onDisappear { headphones.stopSoundLevel() }
     }
 
     private var connectedContent: some View {
-        VStack(spacing: 10) {
-            noiseCard
-            listeningCard
-            soundCard
-            featuresCard
-            equalizerCard
-            devicesCard
+        HStack(alignment: .top, spacing: 10) {
+            VStack(spacing: 10) {
+                noiseCard
+                listeningCard
+                soundCard
+                featuresCard
+            }
+            .frame(width: 316)
+            VStack(spacing: 10) {
+                equalizerCard
+                devicesCard
+            }
+            .frame(width: 316)
         }
     }
 
@@ -112,8 +118,6 @@ struct Panel: View {
 
     private var soundCard: some View {
         Card {
-            SoundMeter(level: headphones.soundLevel, note: headphones.soundLevelNote)
-            Divider().opacity(0.6)
             ValueSlider(
                 title: "Volume",
                 value: $headphones.volume,
@@ -122,6 +126,8 @@ struct Panel: View {
                 high: "speaker.wave.3.fill",
                 commit: headphones.commitVolume
             )
+            Divider().opacity(0.6)
+            SoundMeter(level: headphones.soundLevel, note: headphones.soundLevelNote)
         }
     }
 
@@ -132,13 +138,6 @@ struct Panel: View {
                 detail: "Restores detail in compressed music",
                 symbol: "sparkles",
                 isOn: Binding(get: { headphones.dsee }, set: headphones.setDSEE)
-            )
-            Divider().opacity(0.6)
-            ToggleRow(
-                title: "Speak-to-Chat",
-                detail: "Pauses music when you start talking",
-                symbol: "bubble.left.and.text.bubble.right",
-                isOn: Binding(get: { headphones.speakToChat }, set: headphones.setSpeakToChat)
             )
         }
     }

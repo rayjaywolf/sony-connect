@@ -33,8 +33,8 @@ struct XM6ControlApp: App {
 
 @MainActor
 final class PanelState: ObservableObject {
-    @Published var equalizerOpen = false
-    @Published var devicesOpen = false
+    @Published var equalizerOpen = true
+    @Published var devicesOpen = true
 }
 
 @MainActor
