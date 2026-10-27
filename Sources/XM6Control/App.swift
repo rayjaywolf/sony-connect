@@ -152,30 +152,30 @@ struct Panel: View {
     private var devicesSection: some View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: 8) {
-            if headphones.devices.isEmpty {
-                Text("Reading paired devices…")
-                    .foregroundStyle(.secondary)
-            }
-            ForEach(headphones.devices.filter(\.connected)) { device in
-                DeviceRow(device: device, playbackFixed: headphones.playbackFixed) {
-                    headphones.playOn(device)
-                } connect: {
-                    headphones.setConnected(device, true)
-                } disconnect: {
-                    headphones.setConnected(device, false)
+                if headphones.devices.isEmpty {
+                    Text("Reading paired devices…")
+                        .foregroundStyle(.secondary)
                 }
-            }
-            if let failure = headphones.switchFailure {
-                Text(failure)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let playing = headphones.devices.first(where: \.playing) {
-                SwitchRow(title: "Keep playback on \(playing.name)", isOn: Binding(
-                    get: { headphones.playbackFixed },
-                    set: { headphones.setPlaybackFixed($0) }
-                ))
-            }
+                ForEach(headphones.devices.filter(\.connected)) { device in
+                    DeviceRow(device: device, playbackFixed: headphones.playbackFixed) {
+                        headphones.playOn(device)
+                    } connect: {
+                        headphones.setConnected(device, true)
+                    } disconnect: {
+                        headphones.setConnected(device, false)
+                    }
+                }
+                if let failure = headphones.switchFailure {
+                    Text(failure)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let playing = headphones.devices.first(where: \.playing) {
+                    SwitchRow(title: "Keep playback on \(playing.name)", isOn: Binding(
+                        get: { headphones.playbackFixed },
+                        set: { headphones.setPlaybackFixed($0) }
+                    ))
+                }
             }
             .padding(.top, 6)
         } label: {
