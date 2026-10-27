@@ -19,6 +19,13 @@ struct PairedDevice: Identifiable, Equatable {
     var id: String { address }
 }
 
+struct EqPreset: Identifiable, Hashable {
+    let id: UInt8
+    let name: String
+
+    var isCustomizable: Bool { id >= 0xA0 && id <= 0xA5 }
+}
+
 enum RoomSize: UInt8, Hashable {
     case myRoom = 0x00
     case livingRoom = 0x01
@@ -48,6 +55,11 @@ final class Headphones: NSObject, ObservableObject {
     @Published private(set) var devices: [PairedDevice] = []
     @Published private(set) var playbackFixed = false
     @Published private(set) var switchFailure: String?
+    @Published private(set) var eqPresets: [EqPreset] = []
+    @Published private(set) var eqPresetID: UInt8?
+    @Published var eqBands: [Double] = []
+    @Published var clearBass: Double = 0
+    @Published private(set) var hasClearBass = false
     @Published var ambientLevel: Double = 10
     @Published var volume: Double = 15
 
@@ -167,6 +179,39 @@ final class Headphones: NSObject, ObservableObject {
         await request([0xE6, 0x04])
         await refreshDevices()
         await request([0x36, 0x01], on: Frame.dataMdr2)
+        await request([0x50, 0x00, 0x01], matchType: false)
+        await request([0x56, 0x00])
+    }
+
+    var currentEqPreset: EqPreset? {
+        eqPresets.first { $0.id == eqPresetID }
+    }
+
+    func selectEqPreset(_ preset: EqPreset) {
+        eqPresetID = preset.id
+        Task {
+            await request([0x58, 0x00, preset.id, 0x00])
+            await request([0x56, 0x00])
+        }
+    }
+
+    func commitEqBands() {
+        guard !eqBands.isEmpty else { return }
+        if currentEqPreset?.isCustomizable != true, eqPresets.contains(where: { $0.id == 0xA0 }) {
+            eqPresetID = 0xA0
+        }
+        guard let preset = eqPresetID else { return }
+        let steps: [UInt8]
+        if hasClearBass {
+            steps = ([clearBass] + eqBands).map { UInt8(clamping: Int($0.rounded()) + 10) }
+        } else {
+            steps = eqBands.map { UInt8(clamping: Int($0.rounded()) + 6) }
+        }
+        Task { await request([0x58, 0x00, preset, UInt8(steps.count)] + steps) }
+    }
+
+    var eqBandRange: ClosedRange<Double> {
+        hasClearBass ? -10...10 : -6...6
     }
 
     func refreshDevices() async {
@@ -273,21 +318,21 @@ final class Headphones: NSObject, ObservableObject {
     }
 
     @discardableResult
-    private func request(_ payload: [UInt8], on dataType: UInt8 = Frame.dataMdr, timeout: Double = 3) async -> [UInt8]? {
+    private func request(_ payload: [UInt8], on dataType: UInt8 = Frame.dataMdr, matchType: Bool = true, timeout: Double = 3) async -> [UInt8]? {
         let previous = queueTail
         let task = Task { () -> [UInt8]? in
             await previous?.value
-            return await self.transmit(payload, on: dataType, timeout: timeout)
+            return await self.transmit(payload, on: dataType, matchType: matchType, timeout: timeout)
         }
         queueTail = Task { _ = await task.value }
         return await task.value
     }
 
-    private func transmit(_ payload: [UInt8], on dataType: UInt8, timeout: Double) async -> [UInt8]? {
+    private func transmit(_ payload: [UInt8], on dataType: UInt8, matchType: Bool, timeout: Double) async -> [UInt8]? {
         guard let channel, channel.isOpen(), let command = payload.first else { return nil }
         let id = UUID()
         return await withCheckedContinuation { continuation in
-            pending = (id, dataType, [command, command &+ 1], payload.count > 1 ? payload[1] : nil, continuation)
+            pending = (id, dataType, [command, command &+ 1], matchType && payload.count > 1 ? payload[1] : nil, continuation)
             let packet = Frame.pack(type: dataType, seq: seq, payload: payload)
             log.info("TX seq=\(self.seq, privacy: .public) \(Self.hex(payload), privacy: .public)")
             guard write(packet, to: channel) else {
@@ -363,6 +408,23 @@ final class Headphones: NSObject, ObservableObject {
         case 0xA7, 0xA9:
             guard p.count >= 3, p[1] == 0x20 else { return }
             volume = Double(p[2])
+        case 0x51:
+            guard p.count >= 5, p[1] == 0x00 || p[1] == 0x04 else { return }
+            eqPresets = Self.parseEqPresets(p)
+        case 0x57, 0x59:
+            guard p.count >= 4, p[1] == 0x00 else { return }
+            eqPresetID = p[2]
+            let count = Int(p[3])
+            guard count > 0, p.count >= 4 + count else { return }
+            let values = p[4..<(4 + count)].map(Int.init)
+            if count == 6 {
+                hasClearBass = true
+                clearBass = Double(values[0] - 10)
+                eqBands = values.dropFirst().map { Double($0 - 10) }
+            } else {
+                hasClearBass = false
+                eqBands = values.map { Double($0 - 6) }
+            }
         case 0xE7, 0xE9:
             guard p.count >= 3 else { return }
             switch p[1] {
@@ -462,6 +524,37 @@ final class Headphones: NSObject, ObservableObject {
                 connected: $0.slot != 0,
                 playing: $0.slot != 0 && $0.slot == playbackSlot
             )
+        }
+    }
+
+    private static func parseEqPresets(_ p: [UInt8]) -> [EqPreset] {
+        let count = Int(p[4])
+        var index = 5
+        var presets: [EqPreset] = []
+        for _ in 0..<count {
+            guard index + 2 <= p.count else { break }
+            let id = p[index]
+            let length = Int(p[index + 1])
+            index += 2
+            guard index + length <= p.count else { break }
+            let name = String(decoding: p[index..<(index + length)], as: UTF8.self)
+            index += length
+            presets.append(EqPreset(id: id, name: name.isEmpty ? Self.defaultEqName(id) : name))
+        }
+        return presets
+    }
+
+    private static func defaultEqName(_ id: UInt8) -> String {
+        switch id {
+        case 0x00: "Off"
+        case 0x30: "Heavy"
+        case 0x31: "Clear"
+        case 0x32: "Hard"
+        case 0x33: "Soft"
+        case 0x20: "Gaming"
+        case 0xA0: "Custom"
+        case 0xA1...0xA5: "User setting \(id - 0xA0)"
+        default: String(format: "Preset %02X", id)
         }
     }
 

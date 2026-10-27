@@ -124,6 +124,10 @@ struct Panel: View {
 
             Divider()
 
+            equalizerSection
+
+            Divider()
+
             devicesSection
 
             Divider()
@@ -146,6 +150,36 @@ struct Panel: View {
                 get: { headphones.speakToChat },
                 set: { headphones.setSpeakToChat($0) }
             ))
+        }
+    }
+
+    private var equalizerSection: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 10) {
+                Picker("Preset", selection: Binding(
+                    get: { headphones.currentEqPreset },
+                    set: { if let preset = $0 { headphones.selectEqPreset(preset) } }
+                )) {
+                    ForEach(headphones.eqPresets) { preset in
+                        Text(preset.name).tag(Optional(preset))
+                    }
+                }
+                .labelsHidden()
+
+                if headphones.eqPresetID != 0x00, !headphones.eqBands.isEmpty {
+                    EqualizerBands(headphones: headphones)
+                }
+            }
+            .padding(.top, 6)
+        } label: {
+            HStack {
+                Text("Equalizer")
+                Spacer()
+                if let preset = headphones.currentEqPreset {
+                    Text(preset.name)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
@@ -265,6 +299,60 @@ final class LoginItem: ObservableObject {
             NSLog("Login item change failed: \(error.localizedDescription)")
         }
         isEnabled = SMAppService.mainApp.status == .enabled
+    }
+}
+
+struct EqualizerBands: View {
+    @ObservedObject var headphones: Headphones
+
+    private static let tenBandLabels = ["31", "63", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
+    private static let fiveBandLabels = ["400", "1k", "2.5k", "6.3k", "16k"]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .bottom, spacing: 0) {
+                if headphones.hasClearBass {
+                    band(label: "Bass", value: $headphones.clearBass)
+                }
+                ForEach(headphones.eqBands.indices, id: \.self) { index in
+                    band(label: label(for: index), value: Binding(
+                        get: { headphones.eqBands.indices.contains(index) ? headphones.eqBands[index] : 0 },
+                        set: { if headphones.eqBands.indices.contains(index) { headphones.eqBands[index] = $0 } }
+                    ))
+                }
+            }
+            if headphones.currentEqPreset?.isCustomizable != true {
+                Text("Moving a slider switches to Custom.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func label(for index: Int) -> String {
+        let labels = headphones.eqBands.count == 10 ? Self.tenBandLabels : Self.fiveBandLabels
+        return labels.indices.contains(index) ? labels[index] : "\(index + 1)"
+    }
+
+    private func band(label: String, value: Binding<Double>) -> some View {
+        VStack(spacing: 4) {
+            Text(value.wrappedValue > 0 ? "+\(Int(value.wrappedValue))" : "\(Int(value.wrappedValue))")
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+            Slider(value: value, in: headphones.eqBandRange, step: 1) { editing in
+                if !editing { headphones.commitEqBands() }
+            }
+            .labelsHidden()
+            .controlSize(.mini)
+            .frame(width: 110)
+            .rotationEffect(.degrees(-90))
+            .frame(width: 28, height: 110)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
