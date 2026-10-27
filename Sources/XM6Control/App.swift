@@ -21,6 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct XM6ControlApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
+    init() {
+        Theme.registerFonts()
+    }
+
     var body: some Scene {
         MenuBarExtra {
             Panel(headphones: delegate.headphones, loginItem: delegate.loginItem, state: delegate.panelState)
