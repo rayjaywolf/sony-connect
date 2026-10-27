@@ -88,8 +88,6 @@ final class Headphones: NSObject, ObservableObject {
     private var queueTail: Task<Void, Never>?
     private var connectNotification: IOBluetoothUserNotification?
     private var batteryTimer: Timer?
-    private var speakToChatSensitivity: UInt8 = 0x01
-    private var speakToChatTimeout: UInt8 = 0x01
     private var recentReconnects: [Date] = []
     private var deviceListType: UInt8 = 0x02
     private var soundLevelType: UInt8?
@@ -350,7 +348,7 @@ final class Headphones: NSObject, ObservableObject {
 
     func setSpeakToChat(_ on: Bool) {
         speakToChat = on
-        Task { await request([0xF8, 0x02, on ? 1 : 0, speakToChatSensitivity, speakToChatTimeout]) }
+        Task { await request([0xF8, 0x02, on ? 0x00 : 0x01, 0x01]) }
     }
 
     private func sendNoiseSettings() {
@@ -540,11 +538,7 @@ final class Headphones: NSObject, ObservableObject {
             }
         case 0xF7, 0xF9:
             guard p.count >= 3 else { return }
-            speakToChat = p[2] != 0
-            if p.count >= 5 {
-                speakToChatSensitivity = p[3]
-                speakToChatTimeout = p[4]
-            }
+            speakToChat = p[2] == 0x00
         default:
             break
         }
